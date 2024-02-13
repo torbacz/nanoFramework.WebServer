@@ -37,7 +37,7 @@ namespace nanoFramework.WebServer
         /// </summary>
         public Authentication Authentication { get; set; }
 
-        public string BuildKey()
+        public static string BuildKey(string Route, string Method)
         {
             var route = Route;
             if (route.StartsWith("/"))

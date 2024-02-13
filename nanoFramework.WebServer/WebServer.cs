@@ -250,7 +250,8 @@ namespace nanoFramework.WebServer
                             }
                         }
 
-                        _callbackRoutes.Add(callbackRoutes.BuildKey(), callbackRoutes);
+                        var key = CallbackRoutes.BuildKey(callbackRoutes.Route, callbackRoutes.Method);
+                        _callbackRoutes.Add(key, callbackRoutes);
                         Debug.WriteLine($"{callbackRoutes.Callback.Name}, {callbackRoutes.Route}, {callbackRoutes.Method}, {callbackRoutes.CaseSensitive}");
                     }
                 }
@@ -539,8 +540,7 @@ namespace nanoFramework.WebServer
                         bool mustAuthenticate;
                         bool isAuthOk;
 
-                        var routeParams = new CallbackRoutes() { Method = context.Request.HttpMethod, Route = context.Request.RawUrl };
-                        var routeParamsKey = routeParams.BuildKey();
+                        var routeParamsKey = CallbackRoutes.BuildKey(context.Request.RawUrl, context.Request.HttpMethod);
                         var routeExists = _callbackRoutes[routeParamsKey];
                         if (routeExists != null)
                         {
