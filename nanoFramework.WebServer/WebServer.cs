@@ -12,6 +12,7 @@ using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Security;
+using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
@@ -45,7 +46,7 @@ namespace nanoFramework.WebServer
 
         private bool _cancel = true;
         private Thread _serverThread = null;
-        private readonly ArrayList _callbackRoutes;
+        private readonly Hashtable _callbackRoutes;
         private readonly HttpListener _listener;
 
         #endregion
@@ -182,7 +183,7 @@ namespace nanoFramework.WebServer
         /// <param name="controllers">Controllers to use with this web server.</param>
         public WebServer(int port, HttpProtocol protocol, Type[] controllers)
         {
-            _callbackRoutes = new ArrayList();
+            _callbackRoutes = new Hashtable();
             RegisterControllers(controllers);
             Protocol = protocol;
             Port = port;
@@ -226,7 +227,7 @@ namespace nanoFramework.WebServer
                         {
                             Route = ((RouteAttribute)attrib).Route,
                             CaseSensitive = false,
-                            Method = string.Empty,
+                            Method = DefaultRouteMethod,
                             Authentication = authentication,
                             Callback = func
                         };
@@ -249,7 +250,7 @@ namespace nanoFramework.WebServer
                             }
                         }
 
-                        _callbackRoutes.Add(callbackRoutes);
+                        _callbackRoutes.Add(callbackRoutes.BuildKey(), callbackRoutes);
                         Debug.WriteLine($"{callbackRoutes.Callback.Name}, {callbackRoutes.Route}, {callbackRoutes.Method}, {callbackRoutes.CaseSensitive}");
                     }
                 }
@@ -537,18 +538,13 @@ namespace nanoFramework.WebServer
                         // Variables used only within the "for". They are here for performance reasons
                         bool mustAuthenticate;
                         bool isAuthOk;
-                        bool isRoute = false;
 
-                        foreach (CallbackRoutes route in _callbackRoutes)
+                        var routeParams = new CallbackRoutes() { Method = context.Request.HttpMethod, Route = context.Request.RawUrl };
+                        var routeParamsKey = routeParams.BuildKey();
+                        var routeExists = _callbackRoutes[routeParamsKey];
+                        if (routeExists != null)
                         {
-                            if (!IsRouteMatch(route, context.Request.HttpMethod, context.Request.RawUrl))
-                            {
-                                continue;
-                            }
-
-                            isRoute = true;
-
-                            // Check auth first
+                            var route = (CallbackRoutes)routeExists;
                             mustAuthenticate = route.Authentication != null && route.Authentication.AuthenticationType != AuthenticationType.None;
                             isAuthOk = !mustAuthenticate;
 
@@ -591,25 +587,25 @@ namespace nanoFramework.WebServer
 
                             InvokeRoute(route, context);
                             HandleContextResponse(context);
+
+                            // Handled by controller
+                            return;
                         }
 
-                        if (!isRoute)
+
+                        if (CommandReceived != null)
                         {
-                            if (CommandReceived != null)
-                            {
-                                // Starting a new thread to be able to handle a new request in parallel
-                                CommandReceived.Invoke(this, new WebServerEventArgs(context));
-                            }
-                            else
-                            {
-                                context.Response.StatusCode = (int)HttpStatusCode.NotFound;
-                                context.Response.ContentLength64 = 0;
-                            }
-
-                            HandleContextResponse(context);
+                            // Starting a new thread to be able to handle a new request in parallel
+                            CommandReceived.Invoke(this, new WebServerEventArgs(context));
                         }
-                    }).Start();
+                        else
+                        {
+                            context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                            context.Response.ContentLength64 = 0;
+                        }
 
+                        HandleContextResponse(context);
+                    }).Start();
                 }
 
                 if (_listener.IsListening)
